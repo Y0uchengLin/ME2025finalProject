@@ -10,7 +10,10 @@ class User(Base):
     id = Column(Integer, primary_key=True)
     username = Column(String(64), unique=True, nullable=False)
     password_hash = Column(String(256), nullable=False)
-    best_score = Column(Integer, default=0)
+
+    best_height = Column(Integer, default=0)  # 登高模式
+    best_speed = Column(Integer, default=99999)  # 速度模式（越低越好）
+
     created_at = Column(DateTime, default=datetime.utcnow)
 def init_db():
     Base.metadata.create_all(bind=engine)

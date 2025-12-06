@@ -19,19 +19,32 @@
   </script>
 </head>
 <body>
-  <div id="ui">
+ <div id="ui">
+    
     <div id="login_panel">
-      <input id="username" placeholder="username">
-      <input id="password" type="password" placeholder="password">
-      <button id="btn_register">Register</button>
-      <button id="btn_login">Login</button>
+        <input id="username" placeholder="username">
+        <input id="password" type="password" placeholder="password">
+        <button id="btn_register">Register</button>
+        <button id="btn_login">Login</button>
     </div>
+
+    <!-- 模式選擇獨立一層 -->
+    <div id="mode_panel" style="display:none;">
+        <button id="mode_height">登高模式</button>
+        <button id="mode_speed">速度競賽</button>
+    </div>
+
+    <button id="btn_back_to_menu"
+            style="display:none; position:absolute; top:120px; left:10px; z-index:20;">
+        回主選單
+    </button>
+
     <div id="hud" style="display:none;">
-      <div>HP: <span id="hp">100</span></div>
-      <div>Kills: <span id="kills">0</span></div>
-      <div>Time: <span id="time">120</span>s</div>
+        HP: <span id="hp">100</span>
+        Time: <span id="time">120</span>
     </div>
-  </div>
+
+</div>
 
   <canvas id="renderCanvas"></canvas>
 

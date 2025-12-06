@@ -7,7 +7,6 @@ from flask import Flask, request, jsonify, render_template, session, send_from_d
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_socketio import SocketIO
 from models import init_db, SessionLocal, User
-from game_logic import ai_loop, enemies
 init_db()
 app = Flask(__name__,
     static_folder="../frontend/static",
@@ -50,12 +49,22 @@ def login():
         return jsonify({"username": user.username})
     finally:
         db.close()
-@app.route("/api/leaderboard")
-def leaderboard():
+@app.route("/api/leaderboard_height")
+def leaderboard_height():
     db = SessionLocal()
     try:
-        top = db.query(User).order_by(User.best_score.desc()).limit(20)
-        return jsonify([{"name": u.username, "score": u.best_score} for u in top])
+        top = db.query(User).order_by(User.best_height.desc()).limit(20)
+        return jsonify([{"name": u.username, "height": u.best_height} for u in top])
+    finally:
+        db.close()
+
+
+@app.route("/api/leaderboard_speed")
+def leaderboard_speed():
+    db = SessionLocal()
+    try:
+        top = db.query(User).order_by(User.best_speed.asc()).limit(20)  # 越小越好
+        return jsonify([{"name": u.username, "time": u.best_speed} for u in top])
     finally:
         db.close()
 # ---- FIXED: assets path ----
@@ -63,42 +72,49 @@ ASSETS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "../fronten
 @app.route("/assets/<path:filename>")
 def serve_assets(filename):
     return send_from_directory(ASSETS_DIR, filename)
-@app.route("/api/submit_score", methods=["POST"])
-def submit_score():
+@app.route("/api/submit_height", methods=["POST"])
+def submit_height():
     uid = session.get("user_id")
     if not uid:
         return jsonify({"error": "not login"}), 401
 
-    score = request.json.get("score", 0)
-    
+    height = request.json.get("height", 0)
     db = SessionLocal()
     try:
         user = db.query(User).get(uid)
-        if score > user.best_score:
-            user.best_score = score
+        if height > user.best_height:
+            user.best_height = height
             db.commit()
         return jsonify({"ok": 1})
     finally:
         db.close()
-# ---------------------- SocketIO ----------------------
-@socketio.on("connect")
-def on_connect():
-    print("client connected")
-@socketio.on("enemy_killed")
-def enemy_killed(data):
-    e_id = data.get("id")
-    if e_id in enemies:
-        enemies[e_id]["alive"] = False
-        enemies.pop(e_id, None)
-player_pos = [0, 1, 0]     # 全域玩家座標（AI loop 會讀）
+
+
+@app.route("/api/submit_speed", methods=["POST"])
+def submit_speed():
+    uid = session.get("user_id")
+    if not uid:
+        return jsonify({"error": "not login"}), 401
+
+    time_used = request.json.get("time", 99999)
+    db = SessionLocal()
+    try:
+        user = db.query(User).get(uid)
+        # 越快越好
+        if time_used < user.best_speed:
+            user.best_speed = time_used
+            db.commit()
+        return jsonify({"ok": 1})
+    finally:
+        db.close()
+
 
 @socketio.on("player_state")
 def update_player_state(data):
     global player_pos
     p = data.get("pos", {})
     player_pos = [p.get("x", 0), p.get("y", 1), p.get("z", 0)]
-# ---------------------- Start AI Loop ----------------------
-ai_loop(socketio)
+
 # ----------------------
 if __name__ == "__main__":
     socketio.run(app, host="0.0.0.0", port=5000)

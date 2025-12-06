@@ -2,6 +2,8 @@ console.log("GAME JS LOADED");
 //--------------------------------------
 // GLOBALS
 //--------------------------------------
+let gameMode = null;
+let startTime = 0;
 let canvas = document.getElementById("renderCanvas");
 let engine = new BABYLON.Engine(canvas, true, { antialias: true });
 let scene;
@@ -15,9 +17,6 @@ let keys = {};
 let moveSpeed = 6;
 let jumpForce = 6;
 let playerReady = false;
-let socket = io({
-    withCredentials: true
-});
 // Enemy pool
 let enemyMeshes = {};
 let enemyTemplate = null;
@@ -60,10 +59,10 @@ async function createScene() {
 
     scene.onBeforeRenderObservable.add(() => {
         if (!playerCapsule) return;
-        
+       
         let p = playerCapsule.position;
         let txt = `Player = (${p.x.toFixed(2)}, ${p.y.toFixed(2)}, ${p.z.toFixed(2)})<br><br>`;
-        
+       
         for (let id in enemyMeshes) {
             let e = enemyMeshes[id].position;
             let dist = BABYLON.Vector3.Distance(p, e).toFixed(2);
@@ -152,29 +151,8 @@ validMeshes.forEach(m => {
         pos.y += 0.55;
         camera.position = pos;
     });
-//--------------------------------------
-// Preload enemy.glb (pooling)
-//--------------------------------------
-BABYLON.SceneLoader.ImportMesh("", "/assets/", "enemy.glb", scene, (meshes) => {
-
-    let valid = meshes.filter(m => m.getTotalVertices() > 0);
-
-    if (valid.length === 0) {
-        console.error("❌ enemy.glb has no valid mesh!");
-        return;
-    }
-
-    enemyTemplate = BABYLON.Mesh.MergeMeshes(valid, true, true, undefined, false, true, scene);
-    enemyTemplate.isPickable = true;
-    enemyTemplate.setEnabled(false);
-
-    console.log("Enemy template loaded");
-
-    // 敵人模型確定載入後，再啟動 socket
-    initSockets();
 
     playerReady = true;
-});
     //--------------------------------------
     // Crosshair
     //--------------------------------------
@@ -244,56 +222,6 @@ function initInput() {
     });
 }
 //--------------------------------------
-// Shoot
-//--------------------------------------
-function shoot() {
-    let ray = camera.getForwardRay(100);
-    let hit = scene.pickWithRay(ray);
-    if (!hit.hit) return;
-    let mesh = hit.pickedMesh;
-    if (!mesh || !mesh.metadata || !mesh.metadata.enemyId) return;
-    let id = mesh.metadata.enemyId;
-    socket.emit("enemy_killed", { id });
-    kills++;
-    document.getElementById("kills").innerText = kills;
-    mesh.dispose();
-    delete enemyMeshes[id];
-}
-window.addEventListener("mousedown", shoot);
-//--------------------------------------
-// Enemy pooling
-//--------------------------------------
-function spawnEnemyMesh(id, pos) {
-    let clone = enemyTemplate.clone("enemy_" + id);
-    clone.setEnabled(true);
-
-    clone.metadata = { enemyId: id };
-    clone.checkCollisions = true;
-
-    clone.position.set(pos[0], pos[1], pos[2]);
-    enemyMeshes[id] = clone;
-}
-//--------------------------------------
-// Enemy State Sync
-//--------------------------------------
-function initSockets() {
-
-    // 敵人出生
-    socket.on("enemy_spawn", data => {
-        spawnEnemyMesh(data.id, data.pos);
-    });
-
-    // 敵人位置同步（AI loop 傳來）
-    socket.on("enemy_state", data => {
-        let mesh = enemyMeshes[data.id];
-        if (!mesh) return;
-
-        mesh.position.x = data.pos[0];
-        mesh.position.y = 0;
-        mesh.position.z = data.pos[2];
-    });
-}
-//--------------------------------------
 // Collision (player hit by enemy)
 //--------------------------------------
 function checkEnemyCollision() {
@@ -313,8 +241,23 @@ function checkEnemyCollision() {
 function respawnPlayer() {
     hp = 100;
     document.getElementById("hp").innerText = hp;
-    playerCapsule.position.copyFromFloats(0, 3, 0);
+
+    if (gameMode === "height") {
+        // 登高模式
+        playerCapsule.position.copyFromFloats(3.8, 1, 5.23);
+    }
+    else if (gameMode === "speed") {
+        // 速度模式
+        playerCapsule.position.copyFromFloats(-8, 1, -4);
+    }
+    else {
+        // 預設
+        playerCapsule.position.copyFromFloats(0, 3, 0);
+    }
+
+    // 清除所有動能
     playerCapsule.physicsImpostor.setLinearVelocity(BABYLON.Vector3.Zero());
+    playerCapsule.physicsImpostor.setAngularVelocity(BABYLON.Vector3.Zero());
 }
 //--------------------------------------
 // Timer
@@ -330,21 +273,17 @@ function updateTimer() {
 //--------------------------------------
 function endGame() {
     gameStarted = false;
-    fetch("/api/submit_score", {
-        method: "POST",
-        headers: { "Content-Type":"application/json" },
-        credentials: "include",
-        body: JSON.stringify({ score: kills })
-    }).then(() => {
-        alert("Time's up! Score: " + kills);
-    });
+
+    document.getElementById("btn_back_to_menu").style.display = "block";
+
+    alert("時間到！遊戲結束");
 }
 //--------------------------------------
 // Game Loop
 //--------------------------------------
 function mainLoop() {
     updateMovement();
-    checkEnemyCollision();
+    updateModeLogic()
     updateTimer();
 
     // ---- FIX: Player fell below map ----
@@ -352,18 +291,16 @@ function mainLoop() {
         respawnPlayer();
     }
 
-    socket.emit("player_state", {
-        pos: {
-            x: playerCapsule.position.x,
-            y: playerCapsule.position.y,
-            z: playerCapsule.position.z
-        }
-    });
+   
 }
 //--------------------------------------
 // Start Loop
 //--------------------------------------
-function startLoop() {
+let loopStarted = false;
+
+function startLoop(){
+    if (loopStarted) return;
+    loopStarted = true;
     scene.registerBeforeRender(mainLoop);
 }
 //--------------------------------------
@@ -372,17 +309,22 @@ function startLoop() {
 function startGame() {
     let username = document.getElementById("username").value;
     let password = document.getElementById("password").value;
+
     fetch("/api/login", {
         method: "POST",
         headers: { "Content-Type":"application/json" },
         credentials: "include",
         body: JSON.stringify({ username, password })
-    }).then(r => r.json()).then(res => {
+    })
+    .then(r => r.json())
+    .then(res => {
         if (res.error) return alert(res.error);
+
+        // 登入成功 → 隱藏 login panel
         document.getElementById("login_panel").style.display = "none";
-        document.getElementById("hud").style.display = "block";
-        gameStarted = true;
-        startLoop();
+
+        // 顯示模式選擇
+        document.getElementById("mode_panel").style.display = "block";
     });
 }
 function register() {
@@ -401,9 +343,113 @@ function register() {
 //--------------------------------------
 // Boot
 //--------------------------------------
+function backToMenu() {
+
+    // 停止遊戲
+    gameStarted = false;
+    gameMode = null;
+
+    // 清掉 HUD
+    document.getElementById("hud").style.display = "none";
+
+    // 顯示模式選單
+    document.getElementById("mode_panel").style.display = "block";
+
+    // 隱藏 “回主選單” 按鈕
+    document.getElementById("btn_back_to_menu").style.display = "none";
+
+    // 重生到中間安全區
+    respawnPlayer();
+}
+
 createScene().then(() => {
     engine.runRenderLoop(() => scene.render());
     window.addEventListener("resize", () => engine.resize());
     document.getElementById("btn_login").onclick = startGame;
     document.getElementById("btn_register").onclick = register;
+    document.getElementById("mode_height").onclick = startHeightMode;
+    document.getElementById("mode_speed").onclick = startSpeedMode;
 });
+function startHeightMode() {
+    gameMode = "height";
+    gameStarted = true;
+    gameTime = 600;
+
+    document.getElementById("hud").style.display = "block";
+    document.getElementById("btn_back_to_menu").style.display = "none";
+
+    // 正確：隱藏模式選單
+    document.getElementById("mode_panel").style.display = "none";
+
+    playerCapsule.position.copyFromFloats(3.8, 1, 5.23);
+    playerCapsule.physicsImpostor.setLinearVelocity(BABYLON.Vector3.Zero());
+
+    startLoop();
+}
+function startSpeedMode() {
+    gameMode = "speed";
+    gameStarted = true;
+    startTime = performance.now();
+    gameTime = 999999;
+
+    document.getElementById("hud").style.display = "block";
+    document.getElementById("btn_back_to_menu").style.display = "none";
+
+    // 正確：隱藏模式選單
+    document.getElementById("mode_panel").style.display = "none";
+
+    playerCapsule.position.copyFromFloats(-8, 1, -4);
+    playerCapsule.physicsImpostor.setLinearVelocity(BABYLON.Vector3.Zero());
+
+    startLoop();
+}
+function updateModeLogic() {
+    if (!gameMode) return;
+
+    // --- 速度模式 ---
+    if (gameMode === "speed") {
+        let p = playerCapsule.position;
+        const goal = new BABYLON.Vector3(-37.4, 3, 21);
+
+    if (BABYLON.Vector3.Distance(p, goal) < 2.0) {
+
+    let used = (performance.now() - startTime) / 1000;
+
+    fetch("/api/submit_speed", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ time: used })
+    });
+
+    alert("你到達終點了！用時：" + used.toFixed(2) + " 秒");
+
+    // --- UI RESET ---
+    backToMenu();
+    return;
+}
+
+
+    // --- 登高模式 ---
+    if (gameMode === "height") {
+        let h = playerCapsule.position.y;
+
+        if (gameTime <= 0) {
+
+    fetch("/api/submit_height", {
+        method: "POST",
+        headers: { "Content-Type":"application/json" },
+        credentials: "include",
+        body: JSON.stringify({ height: h })
+    });
+
+    alert("10 分鐘到了！你的高度：" + h.toFixed(2));
+
+    // --- UI RESET ---
+    backToMenu();
+    return;
+    }
+    }
+}
+}
+document.getElementById("btn_back_to_menu").onclick = backToMenu;
