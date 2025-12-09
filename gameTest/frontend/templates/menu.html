@@ -1,0 +1,181 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Parkour Game - Menu</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body style="background-color: #333;">
+
+  <div class="menu-container" id="main_menu_container">
+
+    <h1>🏃‍♂️ 跑酷遊戲 🎯</h1>
+
+    <div id="auth_panel">
+      <h3>登入 / 註冊</h3>
+      <input id="auth_username" placeholder="Username">
+      <input id="auth_password" type="password" placeholder="Password">
+      <div>
+        <button id="btn_login">登入</button>
+        <button id="btn_register">註冊</button>
+        <button id="btn_logout" style="display:none;">登出</button>
+      </div>
+    </div>
+
+    <div id="mode_panel" style="display:none;">
+      <h3>選擇遊戲模式</h3>
+      <p id="welcome_message" style="color: lightgreen;"></p>
+      <button onclick="startGame('height')">⛰️ 登高模式 (高度)</button>
+      <button onclick="startGame('speed')">⏱️ 速度競賽 (時間)</button>
+      <button id="btn_show_leaderboard">🏆 查看排行榜</button>
+      <button id="btn_logout_mode_panel">登出</button>
+    </div>
+
+    <div id="leaderboard_panel" class="menu-container" style="display:none;">
+        <h3>🏆 排行榜</h3>
+        <button id="btn_toggle_leaderboard_mode">切換至 速度/登高 排行榜</button>
+        <div id="leaderboard_content"></div>
+        <button onclick="hideLeaderboard()">返回主選單</button>
+    </div>
+  </div>
+
+  <script>
+    const authPanel = document.getElementById("auth_panel");
+    const modePanel = document.getElementById("mode_panel");
+    const leaderboardPanel = document.getElementById("leaderboard_panel");
+    const leaderboardContent = document.getElementById("leaderboard_content");
+    const btnLogoutAuth = document.getElementById("btn_logout");
+    const btnLogoutMode = document.getElementById("btn_logout_mode_panel");
+
+    let currentLeaderboardMode = 'height'; 
+
+    function showModePanel(username) {
+        document.getElementById("welcome_message").innerText = `歡迎回來, ${username}!`;
+        authPanel.style.display = 'none';
+        modePanel.style.display = 'flex';
+        btnLogoutAuth.style.display = 'none';
+    }
+
+    function showAuthPanel() {
+        authPanel.style.display = 'flex';
+        modePanel.style.display = 'none';
+        leaderboardPanel.style.display = 'none';
+        btnLogoutAuth.style.display = 'none'; // 登入前不顯示登出
+    }
+    
+    // 登入
+    document.getElementById("btn_login").onclick = () => {
+      const username = document.getElementById("auth_username").value;
+      const password = document.getElementById("auth_password").value;
+
+      fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ username, password })
+      }).then(r => r.json()).then(res => {
+        if(res.error) return alert("登入失敗: " + res.error);
+        showModePanel(res.username);
+      });
+    };
+
+    // 註冊
+    document.getElementById("btn_register").onclick = () => {
+      const username = document.getElementById("auth_username").value;
+      const password = document.getElementById("auth_password").value;
+
+      fetch("/api/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ username, password })
+      }).then(r => r.json()).then(res => {
+        if(res.error) return alert("註冊失敗: " + res.error);
+        alert("註冊成功，請登入");
+      });
+    };
+    
+    // 登出
+    function logout() {
+        fetch("/api/logout", { method: "POST" })
+            .then(() => {
+                alert("已登出");
+                showAuthPanel();
+            })
+            .catch(e => console.error("Logout error:", e));
+    }
+    btnLogoutAuth.onclick = logout;
+    btnLogoutMode.onclick = logout;
+
+    // 開始遊戲
+    function startGame(mode){
+      window.location.href = `/game/${mode}`;
+    }
+
+    // 檢查登入狀態 (頁面載入時)
+    window.onload = () => {
+        fetch("/api/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ "check_session": true })
+        }).then(r => {
+            if (r.ok) return r.json();
+            throw new Error('Not logged in');
+        }).then(res => {
+            if (res.username) showModePanel(res.username);
+        }).catch(e => {
+            showAuthPanel();
+        });
+    }
+
+    // 顯示排行榜
+    document.getElementById("btn_show_leaderboard").onclick = () => {
+        modePanel.style.display = 'none';
+        leaderboardPanel.style.display = 'flex';
+        fetchLeaderboard(currentLeaderboardMode);
+    };
+
+    // 切換排行榜模式
+    document.getElementById("btn_toggle_leaderboard_mode").onclick = () => {
+        currentLeaderboardMode = currentLeaderboardMode === 'height' ? 'speed' : 'height';
+        fetchLeaderboard(currentLeaderboardMode);
+    };
+
+    // 獲取並渲染排行榜
+    function fetchLeaderboard(mode) {
+        leaderboardContent.innerHTML = '<p>載入中...</p>';
+        const url = mode === 'height' ? "/api/leaderboard_height" : "/api/leaderboard_speed";
+        
+        document.getElementById("btn_toggle_leaderboard_mode").innerText = 
+            mode === 'height' ? '切換至 ⏱️ 速度競賽 排行榜' : '切換至 ⛰️ 登高模式 排行榜';
+
+        fetch(url)
+            .then(r => r.json())
+            .then(data => {
+                let html = `<table><tr><th>#</th><th>玩家</th><th>${mode === 'height' ? '最高高度 (m)' : '最快時間 (s)'}</th></tr>`;
+                
+                data.forEach((item, index) => {
+                    // 速度模式的 time 是 int (百分之一秒)，所以要除以 100
+                    const score = mode === 'height' ? item.height : (item.time / 100).toFixed(2);
+                    html += `<tr><td>${index + 1}</td><td>${item.name}</td><td>${score}</td></tr>`;
+                });
+
+                html += '</table>';
+                leaderboardContent.innerHTML = html;
+            })
+            .catch(error => {
+                leaderboardContent.innerHTML = '<p style="color: red;">載入排行榜失敗。</p>';
+                console.error('Error fetching leaderboard:', error);
+            });
+    }
+
+    // 隱藏排行榜
+    function hideLeaderboard() {
+        leaderboardPanel.style.display = 'none';
+        modePanel.style.display = 'flex';
+    }
+  </script>
+
+</body>
+</html>
