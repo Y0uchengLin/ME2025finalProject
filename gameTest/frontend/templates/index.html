@@ -1,76 +1,75 @@
 <!doctype html>
 <html>
 <head>
- <meta charset="utf-8" />
- <title>Parkour Game</title>
- <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
- <script src="https://cdn.babylonjs.com/babylon.js"></script>
- <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
- <script src="{{ url_for('static', filename='ammo/ammo.js') }}"></script>
- <script src="{{ url_for('static', filename='ammo/ammo.wasm.js') }}"></script>
- <script>
-   // 讓 ammo.wasm 能被正確找到
-   var AmmoModule = {
-     locateFile: function (path) {
-       return "/static/ammo/" + path;
-     }
-   };
- </script>
+<meta charset="utf-8" />
+<title>Parkour Game</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+<script src="https://cdn.babylonjs.com/babylon.js"></script>
+<script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+<script src="{{ url_for('static', filename='ammo/ammo.js') }}"></script>
+<script src="{{ url_for('static', filename='ammo/ammo.wasm.js') }}"></script>
+<script>
+ // 讓 ammo.wasm 能被正確找到
+ var AmmoModule = {
+  locateFile: function (path) {
+   return "/static/ammo/" + path;
+  }
+ };
+</script>
 </head>
 <body>
 
-  <div id="ui">
-   <div id="hud" style="display:none; flex-direction: column; gap: 5px;">
-          座標: <span id="position_value">X: 0.00 Y: 0.00 Z: 0.00</span>
-          <span>
-     🏃‍♂️ Height: <span id="height_value">0.00</span> m | ⏱️ Time: <span id="time_value">600</span> s
-     </span>
-   </div>
+ <div id="ui">
+ <div id="hud" style="display:none; flex-direction: column; gap: 5px;">
+     座標: <span id="position_value">X: 0.00 Y: 0.00 Z: 0.00</span>
+     <span>
+  <span id="score_label">🏃‍♂️ Height</span>: <span id="height_value">0.00</span> m | ⏱️ Time: <span id="time_value">600</span> s
+  </span>
+ </div>
+</div>
+
+ <div id="main_menu_panel" class="menu-container">
+ <h1>跑酷遊戲</h1>
+
+   <div id="auth_panel" style="display: {{ 'none' if logged_in else 'flex' }}; flex-direction: column; gap: 10px;">
+  <input id="username" placeholder="Username">
+  <input id="password" type="password" placeholder="Password">
+  <button id="btn_login">登入</button>
+  <button id="btn_register">註冊</button>
  </div>
  
-  <div id="main_menu_panel" class="menu-container">
-   <h1>跑酷遊戲</h1>
-
-      <div id="auth_panel" style="display: {{ 'none' if logged_in else 'flex' }}; flex-direction: column; gap: 10px;">
-     <input id="username" placeholder="Username">
-     <input id="password" type="password" placeholder="Password">
-     <button id="btn_login">登入</button>
-     <button id="btn_register">註冊</button>
-   </div>
-   
-      <div id="mode_panel" style="display: {{ 'flex' if logged_in else 'none' }}; flex-direction: column; gap: 10px;">
-     <p id="welcome_msg" style="color: lightgreen;">歡迎, {{ username or '玩家' }}!</p>
-     <button id="mode_height">⛰️ 登高模式</button>
-     <button id="mode_speed">⏱️ 速度競賽</button>
-     <button id="btn_show_leaderboard">🏆 排行榜</button>
-     <button id="btn_logout">登出</button>
-   </div>
-
-      <div id="leaderboard_panel" class="menu-container" style="display: none; position: static;">
-     <h3>🏆 排行榜</h3>
-     <button id="btn_toggle_leaderboard_mode">切換至 速度/登高</button>
-     <div id="leaderboard_content" style="max-height: 300px; overflow-y: auto; color: white;"></div>
-     <button id="btn_back_from_leaderboard">返回主選單</button>
-   </div>
- </div>
- 
-  <div id="pause_menu" class="menu-container" style="display:none;">
-   <h2>遊戲暫停</h2>
-   <button id="btn_resume">繼續遊戲</button>
-   <button id="btn_restart">重新開始 (重設數值)</button>
-   <button id="btn_exit">返回主選單</button>
- </div>
- 
-  <div id="game_over_menu" class="menu-container" style="display:none;">
-   <h2>遊戲結束</h2>
-   <p id="final_result_text"></p>
-   <p id="new_best_text" style="color: yellow;"></p>
-   <button id="btn_back_to_menu_from_gameover">返回主選單</button>
+   <div id="mode_panel" style="display: {{ 'flex' if logged_in else 'none' }}; flex-direction: column; gap: 10px;">
+  <p id="welcome_msg" style="color: lightgreen;">歡迎, {{ username or '玩家' }}!</p>
+  <button id="mode_height">⛰️ 登高模式</button>
+  <button id="mode_speed">⏱️ 速度競賽</button>
+  <button id="mode_shooting">🎯 射擊模式</button>    <button id="btn_show_leaderboard">🏆 排行榜</button>
+  <button id="btn_logout">登出</button>
  </div>
 
+   <div id="leaderboard_panel" class="menu-container" style="display: none; position: static;">
+  <h3>🏆 排行榜</h3>
+  <button id="btn_toggle_leaderboard_mode">切換排行榜模式</button>    <div id="leaderboard_content" style="max-height: 300px; overflow-y: auto; color: white;"></div>
+  <button id="btn_back_from_leaderboard">返回模式選擇</button>
+ </div>
+</div>
 
- <canvas id="renderCanvas"></canvas>
+ <div id="pause_menu" class="menu-container" style="display:none;">
+ <h2>遊戲暫停</h2>
+ <button id="btn_resume">繼續遊戲</button>
+ <button id="btn_restart">重新開始 (傳送)</button>
+ <button id="btn_exit">返回主選單</button>
+</div>
 
- <script src="{{ url_for('static', filename='js/game.js') }}"></script>
+ <div id="game_over_menu" class="menu-container" style="display:none;">
+ <h2>遊戲結束</h2>
+ <p id="final_result_text"></p>
+ <p id="new_best_text" style="color: yellow;"></p>
+ <button id="btn_back_to_menu_from_gameover">返回主選單</button>
+</div>
+
+
+<canvas id="renderCanvas"></canvas>
+
+<script src="{{ url_for('static', filename='js/game.js') }}"></script>
 </body>
 </html>

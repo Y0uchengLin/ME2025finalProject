@@ -29,7 +29,7 @@ def index():
 def logout():
     session.pop("user_id", None)
     session.pop("username", None)
-    return jsonify({"ok": 1}), 200 # 確保返回 200
+    return jsonify({"ok": 1}), 200
 
 @app.route("/api/register", methods=["POST"])
 def register():
@@ -43,7 +43,7 @@ def register():
                     password_hash=generate_password_hash(data["password"]))
         db.add(user)
         db.commit()
-        return jsonify({"ok": 1}), 200 # 確保返回 200
+        return jsonify({"ok": 1}), 200
     finally:
         db.close()
 
@@ -76,15 +76,22 @@ def leaderboard_height():
     finally:
         db.close()
 
-
 @app.route("/api/leaderboard_speed")
 def leaderboard_speed():
     db = SessionLocal()
     try:
-        # 注意: DB 中存儲的 best_speed 是釐秒 (*100)，這裡需要轉換回秒數 (float)
         top = db.query(User).order_by(User.best_speed.asc()).limit(20)
-        # Python 3 中整數除以 100 會返回浮點數
-        return jsonify([{"name": u.username, "time": u.best_speed } for u in top if u.best_speed < 99999]), 200
+        return jsonify([{"name": u.username, "time": u.best_speed / 100} for u in top if u.best_speed < 99999]), 200
+    finally:
+        db.close()
+        
+# ⭐ 新增：射擊模式排行榜
+@app.route("/api/leaderboard_shooting")
+def leaderboard_shooting():
+    db = SessionLocal()
+    try:
+        top = db.query(User).order_by(User.best_shooting_score.desc()).limit(20)
+        return jsonify([{"name": u.username, "score": u.best_shooting_score} for u in top]), 200
     finally:
         db.close()
 
@@ -108,7 +115,6 @@ def submit_height():
         if is_new_best:
             user.best_height = height
             db.commit()
-        # 修正: 確保返回 200 OK 狀態碼
         return jsonify({"ok": 1, "new_best": is_new_best}), 200
     finally:
         db.close()
@@ -119,7 +125,6 @@ def submit_speed():
     if not uid:
         return jsonify({"error": "not login"}), 401
 
-    # 提交的成績應該是秒數 (float)，我們在 DB 中依然以釐秒存儲以避免浮點數精度問題
     time_used_seconds = request.json.get("time", 99999) 
     time_used_centi = int(time_used_seconds * 100) 
     
@@ -130,7 +135,26 @@ def submit_speed():
         if is_new_best:
             user.best_speed = time_used_centi
             db.commit()
-        # 修正: 確保返回 200 OK 狀態碼
+        return jsonify({"ok": 1, "new_best": is_new_best}), 200
+    finally:
+        db.close()
+
+# ⭐ 新增：提交射擊模式分數
+@app.route("/api/submit_shooting", methods=["POST"])
+def submit_shooting():
+    uid = session.get("user_id")
+    if not uid:
+        return jsonify({"error": "not login"}), 401
+
+    score = request.json.get("score", 0)
+    
+    db = SessionLocal()
+    try:
+        user = db.query(User).get(uid)
+        is_new_best = score > user.best_shooting_score
+        if is_new_best:
+            user.best_shooting_score = score
+            db.commit()
         return jsonify({"ok": 1, "new_best": is_new_best}), 200
     finally:
         db.close()
