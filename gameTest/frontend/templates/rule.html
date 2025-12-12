@@ -1,0 +1,28 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>好玩遊戲 - 規則</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div id="intro_page_2" class="menu-container" style="display: flex; cursor: pointer;">
+        <h1>遊戲規則說明</h1>
+        <ul>
+            <li>**登高模式**：在 60 秒內，挑戰地圖上的最高高度 。</li>
+            <li>**速度競賽**：競速通過終點，計時越短越好。</li>
+            <li>**射擊模式**：在 60 秒內射擊最多的紅色目標方塊得分。</li>
+        </ul>
+        <p style="margin-top: 20px;">點擊滑鼠左鍵進入下一頁</p>
+    </div>
+
+    <script>
+        // 點擊左鍵導航到下一頁 (control.html)
+        document.getElementById('intro_page_2').addEventListener('mousedown', (e) => {
+            if (e.button === 0) { // 左鍵
+                window.location.href = "{{ url_for('controls_page') }}";
+            }
+        });
+    </script>
+</body>
+</html>

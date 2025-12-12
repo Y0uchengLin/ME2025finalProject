@@ -1,0 +1,27 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>好玩遊戲 - 介紹</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div id="intro_page_1" class="menu-container" style="display: flex; cursor: pointer;">
+        <h1>好玩遊戲</h1>
+        <p>點擊滑鼠左鍵進入下一頁</p>
+        <div style="margin-top: 20px; text-align: center;">
+            <p>作者: Benny, Ray</p>
+            <p>物理引擎: <a href="https://github.com/kripken/ammo.js" target="_blank">ammo.js</a></p>
+        </div>
+    </div>
+
+    <script>
+        // 點擊左鍵導航到下一頁 (rule.html)
+        document.getElementById('intro_page_1').addEventListener('mousedown', (e) => {
+            if (e.button === 0) { // 左鍵
+                window.location.href = "{{ url_for('rules_page') }}";
+            }
+        });
+    </script>
+</body>
+</html>

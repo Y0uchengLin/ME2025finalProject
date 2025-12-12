@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>好玩遊戲 - 控制</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div id="intro_page_3" class="menu-container" style="display: flex; cursor: pointer;">
+        <h1>輸入操作說明</h1>
+        <ul>
+            <li>**移動**: WASD</li>
+            <li>**跳躍**: Space (空白鍵)</li>
+            <li>**視角**: 滑鼠移動 (鎖定指標)</li>
+            <li>**射擊**: 滑鼠左鍵 (僅射擊模式有效)</li>
+            <li>**暫停/選單**: ESC</li>
+        </ul>
+        <p style="margin-top: 20px;">點擊滑鼠左鍵進入主菜單 (登入/註冊)</p>
+    </div>
+
+    <script>
+        // 點擊左鍵導航到主遊戲頁面 (index.html)
+        document.getElementById('intro_page_3').addEventListener('mousedown', (e) => {
+            if (e.button === 0) { // 左鍵
+                // 導航到主頁面並帶上參數標記 (flag)
+                window.location.href = "{{ url_for('index') }}";
+            }
+        });
+    </script>
+</body>
+</html>

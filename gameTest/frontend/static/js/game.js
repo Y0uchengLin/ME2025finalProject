@@ -1,4 +1,4 @@
-console.log("GAME JS LOADED (Single Player Mode FINAL FIX v29 - Final Unit & DB Check)");
+console.log("GAME JS LOADED (Single Player Mode FINAL FIX v38 - Intro Flow Check)");
 
 //--------------------------------------
 // GLOBALS
@@ -24,7 +24,7 @@ let maxHeight = 0; // 現在追蹤玩家達到的絕對 Y 坐標最大值
 // 射擊模式專用變數
 let targets = [];
 let shootingScore = 0;
-const SHOOTING_TIME_LIMIT = 30;
+const SHOOTING_TIME_LIMIT = 60;
 // 射擊模式的起始點
 const START_POS_SHOOTING = new BABYLON.Vector3(2, 1, -11.4);
 const TARGET_SPAWN_RADIUS = 15;
@@ -45,7 +45,7 @@ const ACTIVE_TAG = 1;
 const START_POS_HEIGHT = new BABYLON.Vector3(3.8, 1, 5.23); 
 const START_POS_SPEED = new BABYLON.Vector3(-8, 5, -4);    
 const GOAL_POS_SPEED = new BABYLON.Vector3(-37.4, 3, 21);
-const HEIGHT_LIMIT_TIME = 600; 
+const HEIGHT_LIMIT_TIME = 60; 
 
 //--------------------------------------
 // Physics Utility: Ammo 原生傳送
@@ -107,7 +107,19 @@ async function createScene() {
     camera.fov = 0.8;
     camera.minZ = 0.1;
     camera.attachControl(canvas, true);
-    camera.angularSensibility = 1000;
+    
+    // 設置角度靈敏度
+    camera.angularSensibility = 1000; 
+
+    // 確保滑鼠輸入是線性的
+    if (camera.inputs.attached.mouse) {
+        camera.inputs.attached.mouse.angularSensibility = 1000;
+    }
+    
+    // 新增事件以阻止滑鼠右鍵選單
+    canvas.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+    });
 
     // 首次點擊畫面即可鎖定指標，與菜單切換分離
     canvas.addEventListener("click", () => {
@@ -168,7 +180,7 @@ async function createScene() {
     playerReady = true;
     createCrosshair();
     initInput();
-    initUIEvents();
+    // initUIEvents() 將在 createScene 外部調用
 
     respawnPlayer("safe"); 
     await new Promise(resolve => setTimeout(resolve, 50)); 
@@ -228,7 +240,8 @@ function handleShooting() {
         targets = targets.filter(t => t !== hit.pickedMesh);
         
         shootingScore++;
-        document.getElementById("height_value").innerText = shootingScore; // 更新得分顯示
+        
+        document.getElementById("height_value").innerText = shootingScore; 
 
         // 如果目標少於 MAX_TARGETS，重新生成一個新的目標來替換被擊中的
         if (targets.length < MAX_TARGETS) {
@@ -358,7 +371,7 @@ function handleDebugMode() {
          maxHeight = newPos.y;
     }
     
-    // 更新 HUD 顯示
+    // 更新 HUD 顯示 (只適用於高度模式，但仍需要更新數值)
     const recordedHeight = Math.max(0, maxHeight - 1.0); 
     document.getElementById("height_value").innerText = Math.max(0, recordedHeight).toFixed(2);
 }
@@ -477,7 +490,8 @@ function handlePlayerMovement(deltaTime) {
     if (keys['d']) moveVector.addInPlace(right);
 
     if (moveVector.length() > 0) {
-        moveVector.normalize();
+        // 執行歸一化，確保斜向移動速度與單軸移動速度一致
+        moveVector.normalize(); 
         moveVector.scaleInPlace(moveSpeed * deltaTime * 60); 
     }
 
@@ -541,6 +555,7 @@ function updateModeLogic() {
             // 遊戲開始時生成初始目標
             generateTargets();
         }
+        // 分數在 handleShooting 中更新
     }
 
 
@@ -561,7 +576,11 @@ function updateTimer() {
 
     if (isHeightMode) {
         // 登山模式：基於 deltaTime 倒數計時
-        gameTime -= deltaTime; 
+        
+        if (!paused) { // 僅在非暫停狀態下才倒數計時
+            gameTime -= deltaTime; 
+        }
+        
         const timeLeft = Math.max(0, gameTime);
         
         // 鎖定 DOM 更新: 只有在非暫停狀態下才改變 HUD 數字
@@ -572,7 +591,11 @@ function updateTimer() {
         if (gameTime <= 0) endGame(false); 
     } else if (isShootingMode) {
         // 射擊模式倒數計時
-        gameTime -= deltaTime; 
+        
+        if (!paused) { // 僅在非暫停狀態下才倒數計時
+            gameTime -= deltaTime; 
+        }
+        
         const timeLeft = Math.max(0, gameTime);
         
         if (!paused) { 
@@ -675,6 +698,9 @@ async function submitScore(isHeightMode, score) {
 
 // 數據重設邏輯
 function _resetGameData(mode) {
+    // 獲取單位元素
+    const scoreUnitElement = document.getElementById("score_unit");
+    
     if (mode === "height") {
         gameTime = HEIGHT_LIMIT_TIME;
         heightTimeOffset = 0; 
@@ -684,14 +710,16 @@ function _resetGameData(mode) {
         
         document.getElementById("time_value").innerText = gameTime.toFixed(0);
         document.getElementById("height_value").innerText = 0.00.toFixed(2); 
-        document.getElementById("score_label").innerText = "高度 (m):";
+        document.getElementById("score_label").innerText = "高度"; 
+        scoreUnitElement.innerText = "m"; // 顯示米單位
     } else if (mode === "speed") {
         gameTime = 0; 
         pausedTime = 0;
         startTime = performance.now(); 
         document.getElementById("time_value").innerText = gameTime.toFixed(2);
-        document.getElementById("score_label").innerText = "高度 (m):";
+        document.getElementById("score_label").innerText = "高度";
         document.getElementById("height_value").innerText = 0.00.toFixed(2);
+        scoreUnitElement.innerText = "m"; // 顯示米單位
     } else if (mode === "shooting") {
         // 射擊模式數據重設
         gameTime = SHOOTING_TIME_LIMIT;
@@ -699,12 +727,11 @@ function _resetGameData(mode) {
         heightTimeOffset = SHOOTING_TIME_LIMIT;
         
         document.getElementById("time_value").innerText = gameTime.toFixed(2);
-        // ⭐ 修正點 14: 修正單位顯示，僅顯示得分
-        document.getElementById("score_label").innerHTML = "得分:";
-        document.getElementById("height_value").innerText = shootingScore;
-
-        targets.forEach(t => t.dispose());
-        targets = [];
+        
+        // 設置為 "得分"，並將單位設置為 "分"
+        document.getElementById("score_label").innerText = "得分"; 
+        document.getElementById("height_value").innerText = shootingScore; // 數值部分
+        scoreUnitElement.innerText = "分"; // 單位部分
     }
 }
 
@@ -734,22 +761,29 @@ function respawnPlayer(mode) {
     } else if (gameMode === "height" || gameMode === "speed" || gameMode === "shooting") {
         gameStarted = true;
         
+        // 獲取單位元素
+        const scoreUnitElement = document.getElementById("score_unit");
+
         // 掉落重生時，更新顯示 (不重設計時)
         if (gameMode === "height") {
             const recordedHeight = Math.max(0, maxHeight - 1.0); // 使用 Y_max - 1 邏輯
             document.getElementById("time_value").innerText = Math.max(0, gameTime).toFixed(0);
             document.getElementById("height_value").innerText = Math.max(0, recordedHeight).toFixed(2);
-            document.getElementById("score_label").innerText = "高度 (m):";
+            document.getElementById("score_label").innerText = "高度";
+            scoreUnitElement.innerText = "m";
         } else if (gameMode === "speed") {
             document.getElementById("time_value").innerText = gameTime.toFixed(2);
             if (startTime > 0) {
                 startTime = performance.now() - (gameTime * 1000);
             }
-             document.getElementById("score_label").innerText = "高度 (m):";
+             document.getElementById("score_label").innerText = "高度";
+             scoreUnitElement.innerText = "m";
         } else if (gameMode === "shooting") {
              document.getElementById("time_value").innerText = gameTime.toFixed(2);
+             // 設置射擊模式單位
              document.getElementById("height_value").innerText = shootingScore;
-             document.getElementById("score_label").innerText = "得分:";
+             document.getElementById("score_label").innerText = "得分";
+             scoreUnitElement.innerText = "分";
              // 確保目標生成
              generateTargets();
         }
@@ -793,6 +827,7 @@ function initUIEvents() {
     };
     document.getElementById("btn_back_to_menu_from_gameover").onclick = backToMainMenu;
 
+    // 啟動登入狀態檢查
     checkLoginStatus();
 }
 
@@ -951,6 +986,9 @@ function fetchLeaderboard(mode) {
 // Boot
 //--------------------------------------
 createScene().then(() => {
+    // ⭐ 啟動 UI 事件綁定和狀態檢查
+    initUIEvents(); 
+    
     engine.runRenderLoop(() => scene.render());
     window.addEventListener("resize", () => engine.resize());
 });
