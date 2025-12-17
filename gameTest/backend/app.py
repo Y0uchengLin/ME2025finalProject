@@ -17,28 +17,21 @@ app.config.update({
 })
 app.secret_key = "dev"
 
-# ⭐ 新增：Session 清除路由
 @app.route("/reset_session")
 def reset_session():
-    # 銷毀所有 Session 數據，包括登入狀態和 intro_done 標記
     session.clear()
-    return redirect(url_for('root')) # 重定向回根路由
+    return redirect(url_for('root'))
 
 # ---------------------- 步驟一：引導頁面路由 ----------------------
 
 @app.route("/")
 def root():
-    # 檢查 Session 中是否有 'intro_done' 標記
     if not session.get('intro_done'):
-        # 如果沒有，則從第一頁引導開始
         return redirect(url_for('intro_page'))
-    
-    # 否則進入遊戲主頁面 (index)
     return index()
 
 @app.route("/intro_page")
 def intro_page():
-    # 確保不會無限重定向
     return render_template("intro.html")
 
 @app.route("/rules_page")
@@ -47,15 +40,13 @@ def rules_page():
 
 @app.route("/controls_page")
 def controls_page():
-    # 在最後一頁設置 Session 標記為 True，表示引導流程已完成
     session['intro_done'] = True
     return render_template("control.html")
 
 # ---------------------- 步驟二：主遊戲與 API 路由 ----------------------
 
-@app.route("/index") # 這是實際的遊戲主頁面
+@app.route("/index")
 def index():
-    # 檢查是否已登入，以決定渲染主菜單的初始狀態
     if session.get("user_id"):
         return render_template("index.html", logged_in=True, username=session.get("username"))
     return render_template("index.html", logged_in=False)
@@ -64,7 +55,6 @@ def index():
 def logout():
     session.pop("user_id", None)
     session.pop("username", None)
-    # 登出時也清除 intro_done 標記，以確保下次啟動流程完整
     session.pop('intro_done', None)
     return jsonify({"ok": 1}), 200
 
@@ -73,8 +63,11 @@ def register():
     db = SessionLocal()
     try:
         data = request.json
+        if not data.get("username") or not data.get("password"):
+            return jsonify({"error": "帳號或密碼不可為空"}), 400
+            
         if db.query(User).filter_by(username=data["username"]).first():
-            return jsonify({"error": "username exists"}), 400
+            return jsonify({"error": "該帳號已存在"}), 400
 
         user = User(username=data["username"],
                     password_hash=generate_password_hash(data["password"]))
@@ -83,7 +76,7 @@ def register():
         return jsonify({"ok": 1}), 200
     except Exception as e:
         print(f"Registration error: {e}")
-        return jsonify({"error": "server registration failed"}), 500
+        return jsonify({"error": "註冊失敗"}), 500
     finally:
         db.close()
 
@@ -93,24 +86,37 @@ def login():
     try:
         data = request.json
         
-        # 處理前端 Session 檢查請求
+        # 處理前端 Session 檢查
         if data.get("check_session"):
              if session.get("user_id"):
-                return jsonify({"username": session.get("username")}), 200
-             return jsonify({"error": "not logged in"}), 401
+                return jsonify({
+                    "username": session.get("username"),
+                    "is_guest": session.get("user_id") == "GUEST"
+                }), 200
+             return jsonify({"error": "未登入"}), 401
         
-        # 處理實際登入請求
-        user = db.query(User).filter_by(username=data["username"]).first()
-        if not user or not check_password_hash(user.password_hash, data["password"]):
-            return jsonify({"error": "invalid"}), 400
+        username = data.get("username", "").strip()
+        password = data.get("password", "").strip()
+
+        # ⭐ 訪客模式：帳號與密碼皆為空白
+        if not username and not password:
+            session["user_id"] = "GUEST"
+            session["username"] = "訪客"
+            return jsonify({"username": "訪客", "is_guest": True}), 200
+
+        # 正常登入
+        user = db.query(User).filter_by(username=username).first()
+        if not user or not check_password_hash(user.password_hash, password):
+            # ⭐ 修改錯誤訊息
+            return jsonify({"error": "帳號或密碼錯誤"}), 400
 
         session["user_id"] = user.id
         session["username"] = user.username
-        return jsonify({"username": user.username}), 200
+        return jsonify({"username": user.username, "is_guest": False}), 200
         
     except Exception as e:
         print(f"Login processing error: {e}")
-        return jsonify({"error": "server login failed"}), 500
+        return jsonify({"error": "伺服器錯誤"}), 500
     finally:
         db.close()
 
@@ -122,10 +128,9 @@ def leaderboard_height():
         return jsonify([{"name": u.username, "height": u.best_height} for u in top]), 200
     except Exception as e:
         print(f"Leaderboard error: {e}")
-        return jsonify({"error": "server error fetching data"}), 500
+        return jsonify({"error": "無法取得排行榜"}), 500
     finally:
         db.close()
-
 
 @app.route("/api/leaderboard_speed")
 def leaderboard_speed():
@@ -135,7 +140,7 @@ def leaderboard_speed():
         return jsonify([{"name": u.username, "time": u.best_speed / 100} for u in top if u.best_speed < 99999]), 200
     except Exception as e:
         print(f"Leaderboard error: {e}")
-        return jsonify({"error": "server error fetching data"}), 500
+        return jsonify({"error": "無法取得排行榜"}), 500
     finally:
         db.close()
         
@@ -147,7 +152,7 @@ def leaderboard_shooting():
         return jsonify([{"name": u.username, "score": u.best_shooting_score} for u in top]), 200
     except Exception as e:
         print(f"Leaderboard error: {e}")
-        return jsonify({"error": "server error fetching data"}), 500
+        return jsonify({"error": "無法取得排行榜"}), 500
     finally:
         db.close()
 
@@ -161,7 +166,11 @@ def serve_assets(filename):
 def submit_height():
     uid = session.get("user_id")
     if not uid:
-        return jsonify({"error": "not login"}), 401
+        return jsonify({"error": "請先登入"}), 401
+    
+    # ⭐ 訪客不計入排行榜
+    if uid == "GUEST":
+        return jsonify({"ok": 0, "message": "訪客模式不計入紀錄"}), 200
 
     height = request.json.get("height", 0)
     db = SessionLocal()
@@ -174,7 +183,7 @@ def submit_height():
         return jsonify({"ok": 1, "new_best": is_new_best}), 200
     except Exception as e:
         print(f"Submission error: {e}")
-        return jsonify({"error": "server submission failed"}), 500
+        return jsonify({"error": "提交失敗"}), 500
     finally:
         db.close()
 
@@ -182,7 +191,11 @@ def submit_height():
 def submit_speed():
     uid = session.get("user_id")
     if not uid:
-        return jsonify({"error": "not login"}), 401
+        return jsonify({"error": "請先登入"}), 401
+
+    # ⭐ 訪客不計入排行榜
+    if uid == "GUEST":
+        return jsonify({"ok": 0, "message": "訪客模式不計入紀錄"}), 200
 
     time_used_seconds = request.json.get("time", 99999) 
     time_used_centi = int(time_used_seconds * 100) 
@@ -197,7 +210,7 @@ def submit_speed():
         return jsonify({"ok": 1, "new_best": is_new_best}), 200
     except Exception as e:
         print(f"Submission error: {e}")
-        return jsonify({"error": "server submission failed"}), 500
+        return jsonify({"error": "提交失敗"}), 500
     finally:
         db.close()
 
@@ -205,7 +218,11 @@ def submit_speed():
 def submit_shooting():
     uid = session.get("user_id")
     if not uid:
-        return jsonify({"error": "not login"}), 401
+        return jsonify({"error": "請先登入"}), 401
+
+    # ⭐ 訪客不計入排行榜
+    if uid == "GUEST":
+        return jsonify({"ok": 0, "message": "訪客模式不計入紀錄"}), 200
 
     score = request.json.get("score", 0)
     
@@ -219,7 +236,7 @@ def submit_shooting():
         return jsonify({"ok": 1, "new_best": is_new_best}), 200
     except Exception as e:
         print(f"Submission error: {e}")
-        return jsonify({"error": "server submission failed"}), 500
+        return jsonify({"error": "提交失敗"}), 500
     finally:
         db.close()
 

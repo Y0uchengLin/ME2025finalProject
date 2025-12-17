@@ -656,7 +656,6 @@ function endGame(completed) {
 
 async function submitScore(isHeightMode, score) {
     const isShootingMode = gameMode === "shooting";
-    
     let endpoint;
     let body;
 
@@ -664,7 +663,6 @@ async function submitScore(isHeightMode, score) {
         endpoint = "/api/submit_height";
         body = { height: score };
     } else if (isShootingMode) {
-        // 提交射擊模式分數
         endpoint = "/api/submit_shooting";
         body = { score: score };
     } else {
@@ -682,13 +680,18 @@ async function submitScore(isHeightMode, score) {
 
         const res = await response.json();
 
+        // ⭐ 修正點 4: 處理訪客提交的回饋
         if (response.status === 401) {
             document.getElementById("new_best_text").innerText = `分數提交失敗: 未登入`;
+        } else if (res.message === "訪客模式不計入紀錄") {
+            document.getElementById("new_best_text").innerText = `提示: 訪客模式不計入排行榜`;
+            document.getElementById("new_best_text").style.color = "#aaaaaa"; // 灰色提示
         } else if (res.ok) {
             const message = res.new_best ? "恭喜! 創下新的最佳紀錄!" : "紀錄已提交。";
             document.getElementById("new_best_text").innerText = message;
+            document.getElementById("new_best_text").style.color = "yellow";
         } else {
-            document.getElementById("new_best_text").innerText = `分數提交失敗: ${res.error || '未知錯誤'}`;
+            document.getElementById("new_best_text").innerText = `提交失敗: ${res.error || '未知錯誤'}`;
         }
     } catch (e) {
         document.getElementById("new_best_text").innerText = "網路錯誤，無法提交分數。";
@@ -845,13 +848,45 @@ function register() {
 function login() { 
     let username = document.getElementById("username").value;
     let password = document.getElementById("password").value;
+    
     fetch("/api/login", {
-        method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ username, password })
+        method: "POST", 
+        headers: { "Content-Type": "application/json" }, 
+        credentials: "include", 
+        body: JSON.stringify({ username, password })
     }).then(r => r.json()).then(res => {
-        if (res.error) return alert(res.error);
-        document.getElementById("welcome_msg").innerText = `歡迎, ${res.username}!`;
+        // ⭐ 修正點 1: 顯示後端傳回的中文錯誤訊息
+        if (res.error) return alert(res.error); 
+        
+        // ⭐ 修正點 2: 訪客模式登入後的歡迎詞
+        const welcomeMsg = (res.username === "訪客") ? "您好, 訪客 (不計分模式)" : `歡迎, ${res.username}!`;
+        document.getElementById("welcome_msg").innerText = welcomeMsg;
+        
         document.getElementById("auth_panel").style.display = 'none';
         document.getElementById("mode_panel").style.display = 'flex';
+    });
+}
+
+function checkLoginStatus() {
+    fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ "check_session": true })
+    }).then(r => {
+        if (r.ok) return r.json();
+        throw new Error('Not logged in');
+    }).then(res => {
+        if (res.username) {
+            // ⭐ 修正點 3: 狀態檢查也套用訪客提醒
+            const welcomeMsg = res.is_guest ? "您好, 訪客 (不計分模式)" : `歡迎, ${res.username}!`;
+            document.getElementById("welcome_msg").innerText = welcomeMsg;
+            document.getElementById("auth_panel").style.display = 'none';
+            document.getElementById("mode_panel").style.display = 'flex';
+        }
+    }).catch(e => {
+        document.getElementById("auth_panel").style.display = 'flex';
+        document.getElementById("mode_panel").style.display = 'none';
     });
 }
 
